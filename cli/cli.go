@@ -6,6 +6,7 @@ import (
 	pb "github.com/gogo/protobuf/proto"
 	"github.com/gorilla/websocket"
 	"log"
+	"math/rand"
 	"net/url"
 	"os"
 	"os/signal"
@@ -22,7 +23,7 @@ var(
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
-	userId = 11111
+	userId = uint64(rand.Int63n(10000))
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 	urlRawPath:=fmt.Sprintf("userId=%d", userId)

@@ -1,13 +1,14 @@
 package handler
 
 import (
+	pb "github.com/gogo/protobuf/proto"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
-	"time"
-	"waitqueue/proto"
+	"strconv"
 	"sync"
-	pb "github.com/gogo/protobuf/proto"
+	"waitqueue/proto"
+	"waitqueue/srv/conn"
 )
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -28,12 +29,15 @@ var (
 )
 func QueryExist(userId uint64) bool {
 	_, exists := registMap.Load(userId)
+	log.Printf("exists:%v", exists)
 	return exists
 }
-func WriteRecord(userId uint64)  {
-	registMap.Store(userId, time.Now())
+func WriteRecord(userId uint64, cc *clic.ClientConn)  {
+	registMap.Store(userId, cc)
 }
-
+func RemoveRecord(userId uint64)  {
+	registMap.Delete(userId)
+}
 // 从channel读数据
 func POPQ(max int) {
 	for {
@@ -47,21 +51,20 @@ func PUSHQ(i uint64) {
 }
 func Login(w http.ResponseWriter, r *http.Request) {
 
-	c, err := upgrader.Upgrade(w, r, nil)
-	userId:= r.URL.Query().Get("userId")
-	log.Println("------->", userId)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	userId := r.URL.Query().Get("userId")
 	if err != nil {
 		log.Print("upgrade:", err)
 		return
 	}
-
-
-	defer c.Close()
+	userIdInt,_:=strconv.Atoi(userId)
+	clientConn := clic.NewClient(uint64(userIdInt), conn)
+	defer clientConn.Conn.Close()
 	for {
-		mt, buffer, err := c.ReadMessage()
+		mt, buffer, err := clientConn.Conn.ReadMessage()
 		if err != nil {
 			log.Println("read:", err)
-
+			RemoveRecord(clientConn.UserId)
 			break
 		}
 		if err := pb.Unmarshal(buffer, &clientReq); err != nil {
@@ -75,23 +78,24 @@ func Login(w http.ResponseWriter, r *http.Request) {
 			if QueryExist(userId){
 				// 如果已经插入过就查询, 不写了
 				log.Printf("QueryExist userId=%d", userId)
-				WriteRecord(userId)
-
 			}else {
 				// 查询如果没有写过就写
+				log.Println("empty map:%v", registMap)
+				WriteRecord(userId, clientConn)
 				PUSHQ(userId)
-				log.Printf("map:%v", registMap)
+				log.Printf("insert map:%v", registMap)
 			}
 			break
 		default:
 			log.Println("not this msgId!")
+			break
 		}
 		serverRes.UserId = userId
 		serverRes.MsgId = revMsgId
 		serverRes.RankNum = uint64(len(waitQueue))
 		log.Printf("write to client: %s", serverRes.String())
 		pbBuffer, _ := pb.Marshal(&serverRes)
-		err = c.WriteMessage(mt, pbBuffer)
+		err = clientConn.Conn.WriteMessage(mt, pbBuffer)
 		if err != nil {
 			log.Println("write:", err)
 			break
