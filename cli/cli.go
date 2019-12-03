@@ -1,0 +1,83 @@
+package main
+
+import (
+	"flag"
+	pb "github.com/gogo/protobuf/proto"
+	"github.com/gorilla/websocket"
+	"log"
+	"net/url"
+	"os"
+	"os/signal"
+	"time"
+	"waitqueue/proto"
+)
+
+var addr = flag.String("addr", "172.16.21.23:8083", "http service address")
+var(
+	clientReq login.Request
+	serverRes login.Response
+	userId uint64
+)
+func main() {
+	flag.Parse()
+	log.SetFlags(0)
+
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/Login"}
+	log.Printf("connecting to %s", u.String())
+
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for {
+			_, buffer, err := c.ReadMessage()
+			if err != nil {
+				log.Println("read:", err)
+				return
+			}
+			if err := pb.Unmarshal(buffer, &serverRes); err != nil {
+				log.Printf("proto unmarshal: %s", err)
+			}
+			log.Printf("recv from server :%s", serverRes.String())
+		}
+	}()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case t := <-ticker.C:
+			clientReq.MsgId = 1
+			userId +=1
+			clientReq.UserId = userId
+			clientReq.Data = t.String()
+			pbBuffer, _ := pb.Marshal(&clientReq)
+
+			err = c.WriteMessage(websocket.BinaryMessage, pbBuffer)
+			if err != nil {
+				log.Println("write:", err)
+				break
+			}
+		case <-interrupt:
+			// 断开的时候指明是哪个userId
+			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, string(userId)))
+			if err != nil {
+				log.Println("write close:", err)
+				return
+			}
+			log.Fatalln("interrupt")
+		}
+	}
+}
