@@ -40,28 +40,28 @@ func POPQ(max int) {
 		r := <-waitQueue
 		log.Println("read value: %d\n", r)
 	}
-
 }
 // 向channel写数据
 func PUSHQ(i uint64) {
 	waitQueue <- i
 }
 func Login(w http.ResponseWriter, r *http.Request) {
+
 	c, err := upgrader.Upgrade(w, r, nil)
+	userId:= r.URL.Query().Get("userId")
+	log.Println("------->", userId)
 	if err != nil {
 		log.Print("upgrade:", err)
 		return
 	}
+
+
 	defer c.Close()
 	for {
 		mt, buffer, err := c.ReadMessage()
-		log.Println("xxxxxx", mt, buffer, err)
-		// 如果客户端主动关闭tcp
-		if mt==websocket.CloseMessage{
-			log.Println("client close!",buffer, buffer[2:], err)
-		}
 		if err != nil {
 			log.Println("read:", err)
+
 			break
 		}
 		if err := pb.Unmarshal(buffer, &clientReq); err != nil {

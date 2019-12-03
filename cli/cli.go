@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	pb "github.com/gogo/protobuf/proto"
 	"github.com/gorilla/websocket"
 	"log"
@@ -21,11 +22,11 @@ var(
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
-
+	userId = 11111
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
-
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/Login"}
+	urlRawPath:=fmt.Sprintf("userId=%d", userId)
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/Login", RawQuery:urlRawPath}
 	log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -60,7 +61,6 @@ func main() {
 			return
 		case t := <-ticker.C:
 			clientReq.MsgId = 1
-			userId +=1
 			clientReq.UserId = userId
 			clientReq.Data = t.String()
 			pbBuffer, _ := pb.Marshal(&clientReq)
