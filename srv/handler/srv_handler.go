@@ -22,27 +22,45 @@ var (
 var (
 	// 排队的队列长度
 	waitQueue = make(chan uint64, 10000)
+	// seqId生成队列
+	seqQueue = make(chan uint64, 10000)
 	// 无缓冲的channel负责挂起主线程
 	msgChan  = make(chan int)
 	// 注册正在排队的用户
 	registMap sync.Map
+	// 当前正在处理的序号
+	curNum uint64
 )
+
+func InitSeqQueue(num uint64)  {
+	for i:=num;i>0 ;i--{
+		seqQueue<-i
+	}
+}
+func GetOneSeqId()  uint64{
+	return <-seqQueue
+}
 func QueryExist(userId uint64) bool {
 	_, exists := registMap.Load(userId)
 	log.Printf("exists:%v", exists)
 	return exists
 }
-func WriteRecord(userId uint64, cc *clic.ClientConn)  {
+func WriteRecord(userId uint64, cc *clic.ClientConn, seqId uint64)  {
 	registMap.Store(userId, cc)
+	PUSHQ(userId)
 }
 func RemoveRecord(userId uint64)  {
 	registMap.Delete(userId)
 }
 // 从channel读数据
-func POPQ(max int) {
+func POPQ() uint64{
 	for {
 		r := <-waitQueue
-		log.Println("read value: %d\n", r)
+		if QueryExist(r){
+			log.Printf("read value: %d\n", r)
+			return r
+		}
+		log.Printf("userId: %d not find\n", r)
 	}
 }
 // 向channel写数据
@@ -58,7 +76,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userIdInt,_:=strconv.Atoi(userId)
-	clientConn := clic.NewClient(uint64(userIdInt), conn)
+
+	clientConn := clic.NewClient(uint64(userIdInt), conn, GetOneSeqId())
 	defer clientConn.Conn.Close()
 	for {
 		mt, buffer, err := clientConn.Conn.ReadMessage()
