@@ -18,8 +18,9 @@ function read_dir(){
                 then
                     cur_path=`pwd`
                     now_path=${cur_path}/$1
+                    echo $now_path
                     # 就是如果多个proto文件之间有互相依赖，生成某个proto文件时，需要import其他几个proto文件，这时候就要用-I来指定搜索目录
-                    protoc --proto_path=${now_path} --micro_out=${now_path}/ --go_out=${now_path}/ ${now_path}/${file}
+                    protoc --proto_path=${now_path} --go_out=plugins=grpc:${now_path}/ ${now_path}/${file}
                 fi
             fi
         done
