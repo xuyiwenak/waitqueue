@@ -11,7 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"time"
-	"waitqueue/proto"
+	"waitqueue/proto/login"
 )
 
 var addr = flag.String("addr", "172.16.21.23:8083", "http service address")

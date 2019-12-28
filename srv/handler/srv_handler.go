@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"waitqueue/proto"
+	"sync/atomic"
+	"waitqueue/proto/login"
 	"waitqueue/srv/conn"
 )
 var upgrader = websocket.Upgrader{
@@ -21,34 +22,62 @@ var (
 )
 var (
 	// 排队的队列长度
-	waitQueue = make(chan uint64, 10000)
+	waitQueue chan uint64
 	// seqId生成队列
-	seqQueue = make(chan uint64, 10000)
+	seqQueue chan uint64
 	// 无缓冲的channel负责挂起主线程
-	msgChan  = make(chan int)
+	msgChan  chan int
 	// 注册正在排队的用户
 	registMap sync.Map
 	// 当前正在处理的序号
 	curNum uint64
 )
 
+func Init()  {
+	// 当前处理的初值
+	atomic.StoreUint64(&curNum, 0)
+	// 排队的队列长度
+	waitQueue = make(chan uint64, 10000)
+	// seqId生成队列
+	seqQueue = make(chan uint64, 10000)
+	// 无缓冲的channel负责挂起主线程
+	msgChan  = make(chan int)
+}
 func InitSeqQueue(num uint64)  {
 	for i:=num;i>0 ;i--{
 		seqQueue<-i
 	}
 }
+
 func GetOneSeqId()  uint64{
 	return <-seqQueue
 }
+
 func QueryExist(userId uint64) bool {
 	_, exists := registMap.Load(userId)
 	log.Printf("exists:%v", exists)
 	return exists
 }
-func WriteRecord(userId uint64, cc *clic.ClientConn, seqId uint64)  {
+func GetCurProcessNum()  uint64{
+	return atomic.LoadUint64(&curNum)
+}
+func AddCurProcessNum()  {
+	atomic.AddUint64(&curNum, 1)
+}
+func GetRankNum(userId uint64)  (uint64, bool){
+	if cc, ok := registMap.Load(userId);ok == true{
+		value:=cc.(*clic.ClientConn)
+		return value.SeqId - GetCurProcessNum(), ok
+	}else {
+		return 0, ok
+	}
+}
+
+func WriteRecord(userId uint64, cc *clic.ClientConn)  {
 	registMap.Store(userId, cc)
 	PUSHQ(userId)
 }
+
 func RemoveRecord(userId uint64)  {
 	registMap.Delete(userId)
 }
@@ -56,6 +85,7 @@ func RemoveRecord(userId uint64)  {
 func POPQ() uint64{
 	for {
 		r := <-waitQueue
+		AddCurProcessNum()
 		if QueryExist(r){
 			log.Printf("read value: %d\n", r)
 			return r
@@ -76,8 +106,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userIdInt,_:=strconv.Atoi(userId)
-
-	clientConn := clic.NewClient(uint64(userIdInt), conn, GetOneSeqId())
+	curSeqId :=GetOneSeqId()
+	clientConn := clic.NewClient(uint64(userIdInt), conn, curSeqId)
 	defer clientConn.Conn.Close()
 	for {
 		mt, buffer, err := clientConn.Conn.ReadMessage()
@@ -98,11 +128,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 				// 如果已经插入过就查询, 不写了
 				log.Printf("QueryExist userId=%d", userId)
 			}else {
-				// 查询如果没有写过就写
-				log.Println("empty map:%v", registMap)
 				WriteRecord(userId, clientConn)
-				PUSHQ(userId)
-				log.Printf("insert map:%v", registMap)
 			}
 			break
 		default:
@@ -111,8 +137,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		}
 		serverRes.UserId = userId
 		serverRes.MsgId = revMsgId
-		serverRes.RankNum = uint64(len(waitQueue))
-		log.Printf("write to client: %s", serverRes.String())
+		serverRes.RankNum, _ = GetRankNum(userId)
+
 		pbBuffer, _ := pb.Marshal(&serverRes)
 		err = clientConn.Conn.WriteMessage(mt, pbBuffer)
 		if err != nil {

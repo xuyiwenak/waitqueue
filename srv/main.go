@@ -29,6 +29,7 @@ func main() {
 		Name("Login")
 	log.Fatal(http.ListenAndServe(*addr, r))
 	*/
+	go handler.RunTokenServer()
 	handler.InitSeqQueue(10000)
 	http.HandleFunc("/Login", handler.Login)
 	log.Fatal(http.ListenAndServe(*addr, nil))

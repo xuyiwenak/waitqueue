@@ -6,7 +6,7 @@ import (
 type ClientConn struct {
 	UserId uint64 // 用户id
 	Conn *websocket.Conn // 个人专属连接
-	seqId uint64
+	SeqId uint64 // 个人排号
 }
 
 func NewClient(userId uint64, con *websocket.Conn, seqId uint64)  *ClientConn{

@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package token;
+
+// service 定义开放调用的服务，即 TokenService 微服务
+service  TokenService {
+    // rpc 定义服务内的 SendTokenInfo 远程调用
+    rpc  SendTokenInfo (TokenRequest) returns (TokenResponse) {
+    }
+}
+// message 对应生成代码的 struct
+message  TokenRequest {
+    repeated string  token = 1;
+}
+
+// token 返回的
+
+message  TokenResponse {
+    int32  ret_code = 1;
+    uint64  user_id = 2;
+    string  bind_token = 3;
+}

@@ -14,3 +14,4 @@ message Response {
     uint64 msg_id = 2;
     uint64 rank_num = 3;
 }
+
