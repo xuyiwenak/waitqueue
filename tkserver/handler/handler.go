@@ -5,9 +5,12 @@ import (
 	"time"
 	"waitqueue/proto/token"
 	"waitqueue/tkserver/access"
+	"log"
+	"context"
+	"google.golang.org/grpc"
 )
 
-func startTicker(conn *ClientConn)  {
+func StartTicker(conn *grpc.ClientConn)  {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -25,7 +28,7 @@ func startTicker(conn *ClientConn)  {
 			if err != nil {
 				log.Fatalf("could not send token: %v", err)
 			}
-
+			log.Printf("bind userId:%d token:%s", r.UserId, r.BindToken)
 		}
 	}
 }

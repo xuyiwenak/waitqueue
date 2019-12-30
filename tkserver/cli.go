@@ -2,12 +2,8 @@ package main
 
 import (
 	"google.golang.org/grpc"
-	"math/rand"
-	"time"
-	"waitqueue/proto/token"
+	"waitqueue/tkserver/handler"
 	"log"
-	"context"
-	"waitqueue/tkserver/access"
 )
 
 
@@ -22,8 +18,6 @@ func main() {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	startTicker(conn)
-
-	log.Printf("bind userId:%d token:%s", r.UserId, r.BindToken)
+	handler.StartTicker(conn)
 }
 
