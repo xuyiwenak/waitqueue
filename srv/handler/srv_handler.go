@@ -5,11 +5,13 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"waitqueue/proto/login"
 	"waitqueue/srv/conn"
+	"waitqueue/utils/queue"
 )
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -21,10 +23,10 @@ var (
 	serverRes login.Response
 )
 var (
-	// 排队的队列长度
-	waitQueue chan uint64
-	// seqId生成队列
-	seqQueue chan uint64
+	// 排队的队列
+	waitQueue *queue.Queue
+	// 座位号队列
+	seqIdQueue *queue.Queue
 	// 无缓冲的channel负责挂起主线程
 	msgChan  chan int
 	// 注册正在排队的用户
@@ -36,21 +38,11 @@ var (
 func Init()  {
 	// 当前处理的初值
 	atomic.StoreUint64(&curNum, 0)
-	// 排队的队列长度
-	waitQueue = make(chan uint64, 10000)
-	// seqId生成队列
-	seqQueue = make(chan uint64, 10000)
+
+	waitQueue = queue.NewQueue(10000)
+	seqIdQueue = queue.NewQueue(10000)
 	// 无缓冲的channel负责挂起主线程
 	msgChan  = make(chan int)
-}
-func InitSeqQueue(num uint64)  {
-	for i:=num;i>0 ;i--{
-		seqQueue<-i
-	}
-}
-
-func GetOneSeqId()  uint64{
-	return <-seqQueue
 }
 
 func QueryExist(userId uint64) bool {
@@ -75,7 +67,7 @@ func GetRankNum(userId uint64)  (uint64, bool){
 
 func WriteRecord(userId uint64, cc *clic.ClientConn)  {
 	registMap.Store(userId, cc)
-	PUSHQ(userId)
+	waitQueue.QPUSH(userId)
 }
 
 func RemoveRecord(userId uint64)  {
@@ -84,22 +76,23 @@ func RemoveRecord(userId uint64)  {
 // 从channel读数据
 func POPQ() uint64{
 	for {
-		r := <-waitQueue
+		r := waitQueue.QPOP()
 		AddCurProcessNum()
-		if QueryExist(r){
-			log.Printf("read value: %d\n", r)
-			return r
+		field := reflect.ValueOf(r)
+		switch field.Kind() {
+		case reflect.Uint64:
+			if QueryExist(field.Interface().(uint64)){
+				log.Printf("read value: %d\n", r)
+				return field.Interface().(uint64)
+			}
+		default:
+			log.Printf("type:%s not in list",field.Kind())
+			return 0
 		}
 		log.Printf("userId: %d not find\n", r)
 	}
 }
-// 向channel写数据
-func PUSHQ(i uint64) {
-	waitQueue <- i
-}
-func LENQ() int{
-	return len(waitQueue)
-}
+
 func Login(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -109,8 +102,8 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userIdInt,_:=strconv.Atoi(userId)
-	curSeqId :=GetOneSeqId()
-	clientConn := clic.NewClient(uint64(userIdInt), conn, curSeqId)
+	curSeqId :=seqIdQueue.QPOP()
+	clientConn := clic.NewClient(uint64(userIdInt), conn, curSeqId.(uint64))
 	defer clientConn.Conn.Close()
 	for {
 		mt, buffer, err := clientConn.Conn.ReadMessage()

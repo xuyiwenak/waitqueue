@@ -23,6 +23,7 @@ var(
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
+	rand.Seed(time.Now().UnixNano())
 	userId = uint64(rand.Int63n(10000))
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)

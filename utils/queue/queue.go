@@ -30,7 +30,6 @@ func(q * Queue) QLEN() int{
 	return len(q.queue)
 }
 
-
 func StructToMap(s interface{},key string) map[string]interface{} {
 	var ret = make(map[string]interface{})
 	modelReflect := reflect.ValueOf(s)

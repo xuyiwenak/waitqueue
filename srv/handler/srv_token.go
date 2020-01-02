@@ -20,7 +20,7 @@ func (s *tkServer) SendTokenInfo(ctx context.Context, in *pb.TokenRequest) (out 
 	log.Printf("Received: %v", in.Token)
 	var outList [] *pb.UserBindList
 	for i:=0; i<len(in.Token);i++ {
-		if LENQ()<=0{
+		if waitQueue.QLEN()<=0{
 			return &pb.TokenResponse{RetCode:-1001, BindList:outList}, nil
 		}
 		popUserId:=POPQ()
