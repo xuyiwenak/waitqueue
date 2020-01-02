@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"log"
 	"context"
 	"google.golang.org/grpc"
+	"log"
 	"net"
 	pb "waitqueue/proto/token"
 )
@@ -11,21 +11,33 @@ import (
 const (
 	port = ":8012"
 )
-// server is used to implement helloworld.GreeterServer.
+
 type tkServer struct{}
 
 // token放入号牌队列中
 
-func (s *tkServer) SendTokenInfo(ctx context.Context, in *pb.TokenRequest) (response *pb.TokenResponse, error) {
+func (s *tkServer) SendTokenInfo(ctx context.Context, in *pb.TokenRequest) (out *pb.TokenResponse, err error) {
 	log.Printf("Received: %v", in.Token)
-	popUserId:=POPQ()
-	return &pb.TokenResponse{RetCode:1, UserId:popUserId, BindToken:in.Token}, nil
+	var outList [] *pb.UserBindList
+	for i:=0; i<len(in.Token);i++ {
+		if LENQ()<=0{
+			return &pb.TokenResponse{RetCode:-1001, BindList:outList}, nil
+		}
+		popUserId:=POPQ()
+		tmp:=&pb.UserBindList{
+			UserId:popUserId,
+			BindToken:in.Token[i],
+		}
+		outList =append(outList, tmp)
+	}
+	return &pb.TokenResponse{RetCode:1, BindList:outList}, nil
 }
 func RunTokenServer()  {
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+	log.Printf("token server start on port:%s ....", port)
 	s := grpc.NewServer()
 	pb.RegisterTokenServiceServer(s, &tkServer{})
 	if err := s.Serve(lis); err != nil {

@@ -13,7 +13,7 @@ func NewClient(userId uint64, con *websocket.Conn, seqId uint64)  *ClientConn{
 	return &ClientConn{
 		UserId:userId,
 		Conn: con,
-		seqId:seqId,
+		SeqId:seqId,
 	}
 }
 // 返回用户连接
@@ -22,5 +22,5 @@ func(c *ClientConn) getConnection()  websocket.Conn{
 }
 // 返回用户当前排名
 func(c *ClientConn) getCurRank(curSeq uint64)  uint64{
-	return c.seqId - curSeq
+	return c.SeqId - curSeq
 }

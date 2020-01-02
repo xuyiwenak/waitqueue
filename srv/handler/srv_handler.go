@@ -97,6 +97,9 @@ func POPQ() uint64{
 func PUSHQ(i uint64) {
 	waitQueue <- i
 }
+func LENQ() int{
+	return len(waitQueue)
+}
 func Login(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)

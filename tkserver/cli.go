@@ -2,8 +2,9 @@ package main
 
 import (
 	"google.golang.org/grpc"
-	"waitqueue/tkserver/handler"
 	"log"
+	"waitqueue/tkserver/handler"
+	"waitqueue/utils/queue"
 )
 
 
@@ -17,7 +18,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
+	q:=queue.NewQueue(100)
 	defer conn.Close()
-	handler.StartTicker(conn)
+	handler.StartTicker(conn, q)
 }
 
