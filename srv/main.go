@@ -1,18 +1,9 @@
 package main
 
 import (
-	"flag"
-	"log"
-	"net/http"
 	"waitqueue/srv/handler"
 )
-
-var addr = flag.String("addr", "172.16.21.23:8083", "http service address")
-
-
 func main() {
-	flag.Parse()
-	log.SetFlags(0)
 	//r := mux.NewRouter()
 	// mux 的经典构造方法具体使用
 	// https://github.com/gorilla/mux/edit/master/README.md
@@ -29,8 +20,8 @@ func main() {
 		Name("Login")
 	log.Fatal(http.ListenAndServe(*addr, r))
 	*/
+	done := make(chan int)
+	go handler.RunLoginServer()
 	go handler.RunTokenServer()
-	handler.InitSeqQueue(10000)
-	http.HandleFunc("/Login", handler.Login)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	<-done
 }

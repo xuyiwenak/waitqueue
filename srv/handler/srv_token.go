@@ -37,7 +37,7 @@ func RunTokenServer()  {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	log.Printf("token server start on port:%s ....", port)
+	log.Printf("token server start on port:%s ...", port)
 	s := grpc.NewServer()
 	pb.RegisterTokenServiceServer(s, &tkServer{})
 	if err := s.Serve(lis); err != nil {

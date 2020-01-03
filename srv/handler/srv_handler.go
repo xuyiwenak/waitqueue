@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"flag"
 	pb "github.com/gogo/protobuf/proto"
 	"github.com/gorilla/websocket"
 	"log"
@@ -13,6 +14,10 @@ import (
 	"waitqueue/srv/conn"
 	"waitqueue/utils/queue"
 )
+
+const loginPort string  = ":8083"
+var addr = flag.String("addr", loginPort, "http service address")
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -44,7 +49,11 @@ func Init()  {
 	// 无缓冲的channel负责挂起主线程
 	msgChan  = make(chan int)
 }
-
+func InsertSeqId(num int)  {
+	for i:=0; i<num;i++  {
+		seqIdQueue.QPUSH(i)
+	}
+}
 func QueryExist(userId uint64) bool {
 	_, exists := registMap.Load(userId)
 	log.Printf("exists:%v", exists)
@@ -120,6 +129,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		userId:=clientReq.UserId
 		switch revMsgId {
 		case 1:
+			log.Printf("rev msgId:%d from userId:%d", revMsgId, userId)
 			if QueryExist(userId){
 				// 如果已经插入过就查询, 不写了
 				log.Printf("QueryExist userId=%d", userId)
@@ -141,5 +151,17 @@ func Login(w http.ResponseWriter, r *http.Request) {
 			log.Println("write:", err)
 			break
 		}
+	}
+}
+
+func RunLoginServer()  {
+	flag.Parse()
+	log.SetFlags(0)
+	Init()
+	InsertSeqId(10000)
+	http.HandleFunc("/Login", Login)
+	log.Printf("login server start on port:%s ...", loginPort)
+	if err:=http.ListenAndServe(*addr, nil);err!=nil{
+		log.Fatal(err)
 	}
 }
