@@ -10,10 +10,17 @@ import (
 	"google.golang.org/grpc"
 	"waitqueue/utils/queue"
 )
+const (
+	// token 推送的间隔
+	tickerInterval time.Duration=2
+)
+
 
 func StartTicker(conn *grpc.ClientConn, q *queue.Queue)  {
 	log.Println("StartTicker")
-	ticker := time.NewTicker(time.Second*2)
+
+	ticker := time.NewTicker(time.Second*tickerInterval)
+	delay := make(chan struct{})
 	defer ticker.Stop()
 
 	for {
@@ -44,8 +51,14 @@ func StartTicker(conn *grpc.ClientConn, q *queue.Queue)  {
 			if err != nil {
 				log.Fatalf("could not send token: %v", err)
 			}
-			log.Printf("bind RetCode:%d BindList:%v", r.RetCode, r.BindList)
+			switch r.RetCode {
+			case -1001:
+				// 如果等待队列已经没有用户了则延迟一段时间再推送
+			default:
 
+			}
+
+			log.Printf("bind RetCode:%d BindList:%v", r.RetCode, r.BindList)
 		}
 	}
 }
@@ -53,15 +66,14 @@ func StartTicker(conn *grpc.ClientConn, q *queue.Queue)  {
 func RandomToken(t time.Time) []string{
 	rand.Seed(t.UnixNano())
 	x := rand.Intn(2)   //生成0-10随机整数
-	tmpStr := make([]string, x)
+	retToken := make([]string, x)
 	for i:=0;i<x ;i++ {
 		if curToken, err :=access.MakeAccessToken(int64(i)+t.UnixNano());err!=nil{
 			log.Fatalf("生成token异常", err)
 			continue
 		} else{
-			tmpStr=append(tmpStr, curToken)
+			retToken=append(retToken, curToken)
 		}
 	}
-	log.Println(tmpStr)
-	return tmpStr
+	return retToken
 }

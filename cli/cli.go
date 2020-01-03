@@ -14,7 +14,7 @@ import (
 	"waitqueue/proto/login"
 )
 
-var addr = flag.String("addr", "172.16.21.23:8083", "http service address")
+var addr = flag.String("addr", "localhost:8083", "http service address")
 var(
 	clientReq login.Request
 	serverRes login.Response
@@ -66,7 +66,7 @@ func main() {
 			clientReq.UserId = userId
 			clientReq.Data = t.String()
 			pbBuffer, _ := pb.Marshal(&clientReq)
-
+			log.Println(t)
 			err = c.WriteMessage(websocket.BinaryMessage, pbBuffer)
 			if err != nil {
 				log.Println("write:", err)

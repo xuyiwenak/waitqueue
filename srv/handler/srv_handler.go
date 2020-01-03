@@ -15,7 +15,7 @@ import (
 	"waitqueue/utils/queue"
 )
 
-const loginPort string  = ":8083"
+const loginPort string  = "localhost:8083"
 var addr = flag.String("addr", loginPort, "http service address")
 
 var upgrader = websocket.Upgrader{
@@ -32,33 +32,34 @@ var (
 	waitQueue *queue.Queue
 	// 座位号队列
 	seqIdQueue *queue.Queue
-	// 无缓冲的channel负责挂起主线程
-	msgChan  chan int
 	// 注册正在排队的用户
 	registMap sync.Map
 	// 当前正在处理的序号
 	curNum uint64
 )
-
+// 基础数据的初始化
 func Init()  {
+	log.Println("Init waitQueue...")
 	// 当前处理的初值
 	atomic.StoreUint64(&curNum, 0)
 
 	waitQueue = queue.NewQueue(10000)
 	seqIdQueue = queue.NewQueue(10000)
-	// 无缓冲的channel负责挂起主线程
-	msgChan  = make(chan int)
 }
+//
 func InsertSeqId(num int)  {
+	log.Printf("insert %d Ids", num)
 	for i:=0; i<num;i++  {
-		seqIdQueue.QPUSH(i)
+		seqIdQueue.QPUSH(uint64(i))
 	}
 }
+
 func QueryExist(userId uint64) bool {
 	_, exists := registMap.Load(userId)
 	log.Printf("exists:%v", exists)
 	return exists
 }
+
 func GetCurProcessNum()  uint64{
 	return atomic.LoadUint64(&curNum)
 }
@@ -103,7 +104,7 @@ func POPQ() uint64{
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
-
+	log.Println("Login start...")
 	conn, err := upgrader.Upgrade(w, r, nil)
 	userId := r.URL.Query().Get("userId")
 	if err != nil {
@@ -129,7 +130,6 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		userId:=clientReq.UserId
 		switch revMsgId {
 		case 1:
-			log.Printf("rev msgId:%d from userId:%d", revMsgId, userId)
 			if QueryExist(userId){
 				// 如果已经插入过就查询, 不写了
 				log.Printf("QueryExist userId=%d", userId)
