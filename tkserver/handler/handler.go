@@ -12,7 +12,7 @@ import (
 )
 const (
 	// token 推送的间隔
-	tickerInterval time.Duration=2
+	tickerInterval time.Duration=5
 )
 
 
@@ -20,7 +20,6 @@ func StartTicker(conn *grpc.ClientConn, q *queue.Queue)  {
 	log.Println("StartTicker")
 
 	ticker := time.NewTicker(time.Second*tickerInterval)
-	delay := make(chan struct{})
 	defer ticker.Stop()
 
 	for {

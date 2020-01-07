@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"time"
 	"waitqueue/proto/login"
+	"waitqueue/utils/msg"
 )
 
 var addr = flag.String("addr", "localhost:8083", "http service address")
@@ -38,11 +39,12 @@ func main() {
 	defer c.Close()
 
 	done := make(chan struct{})
-
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	go func() {
 		defer close(done)
 		for {
-			_, buffer, err := c.ReadMessage()
+			mt, buffer, err := c.ReadMessage()
 			if err != nil {
 				log.Println("read:", err)
 				return
@@ -50,13 +52,23 @@ func main() {
 			if err := pb.Unmarshal(buffer, &serverRes); err != nil {
 				log.Printf("proto unmarshal: %s", err)
 			}
+			log.Printf("recv from server=%s, msgtype=%d", serverRes.String(), mt)
+			revMsgId:=serverRes.MsgId
+			switch revMsgId {
+			case msg.QUERY:
+				log.Println("recv query...")
+				break
+			case msg.CANCEL:
+				log.Println("stop ticker...")
+				ticker.Stop()
+				break
+			default:
+				log.Println("not this msgId!")
+				break
+			}
 			log.Printf("recv from server :%s", serverRes.String())
 		}
 	}()
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-done:

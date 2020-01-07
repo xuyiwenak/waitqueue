@@ -29,7 +29,11 @@ func (s *tkServer) SendTokenInfo(ctx context.Context, in *pb.TokenRequest) (out 
 			BindToken:in.Token[i],
 		}
 		outList =append(outList, tmp)
+
+		// 移除在排队状态中的userId
+		RemoveRecord(popUserId)
 	}
+
 	return &pb.TokenResponse{RetCode:1, BindList:outList}, nil
 }
 func RunTokenServer()  {

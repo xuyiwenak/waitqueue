@@ -1,7 +1,9 @@
 package clic
 
 import (
+	pb "github.com/gogo/protobuf/proto"
 	"github.com/gorilla/websocket"
+	"log"
 )
 type ClientConn struct {
 	UserId uint64 // 用户id
@@ -16,11 +18,17 @@ func NewClient(userId uint64, con *websocket.Conn, seqId uint64)  *ClientConn{
 		SeqId:seqId,
 	}
 }
-// 返回用户连接
-func(c *ClientConn) getConnection()  websocket.Conn{
+// 返回用户连接G
+func(c *ClientConn) GetConnection()  websocket.Conn{
 	return *c.Conn
 }
-// 返回用户当前排名
-func(c *ClientConn) getCurRank(curSeq uint64)  uint64{
-	return c.SeqId - curSeq
+
+func(c *ClientConn) SendPBMsg(userId uint64, buffer pb.Message)  error{
+	pbBuffer, _ := pb.Marshal(buffer)
+	err := c.Conn.WriteMessage(websocket.BinaryMessage, pbBuffer)
+	if err != nil {
+		log.Println("write:", err)
+		return err
+	}
+	return nil
 }

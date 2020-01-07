@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"waitqueue/proto/login"
 	"waitqueue/srv/conn"
+	"waitqueue/utils/msg"
 	"waitqueue/utils/queue"
 )
 
@@ -42,7 +43,7 @@ func Init()  {
 	log.Println("Init waitQueue...")
 	// 当前处理的初值
 	atomic.StoreUint64(&curNum, 0)
-
+	// 队列初始化
 	waitQueue = queue.NewQueue(10000)
 	seqIdQueue = queue.NewQueue(10000)
 }
@@ -69,6 +70,7 @@ func AddCurProcessNum()  {
 func GetRankNum(userId uint64)  (uint64, bool){
 	if cc, ok := registMap.Load(userId);ok == true{
 		value:=cc.(*clic.ClientConn)
+		log.Println(value.SeqId, GetCurProcessNum())
 		return value.SeqId - GetCurProcessNum(), ok
 	}else {
 		return 0, ok
@@ -81,6 +83,20 @@ func WriteRecord(userId uint64, cc *clic.ClientConn)  {
 }
 
 func RemoveRecord(userId uint64)  {
+	conn, exists := registMap.Load(userId)
+	if exists{
+		value:=conn.(*clic.ClientConn)
+		var cancel login.Response
+		cancel.MsgId=msg.CANCEL
+		if err:=value.SendPBMsg(userId, &cancel);err!=nil{
+			log.Println(err)
+		}
+		if err:=value.Conn.Close();err!=nil{
+			log.Printf("close client err: err=%s",err)
+		} else {
+			log.Printf("userId:%d close successfully!",userId)
+		}
+	}
 	registMap.Delete(userId)
 }
 // 从channel读数据
@@ -114,7 +130,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	userIdInt,_:=strconv.Atoi(userId)
 	curSeqId :=seqIdQueue.QPOP()
 	clientConn := clic.NewClient(uint64(userIdInt), conn, curSeqId.(uint64))
-	defer clientConn.Conn.Close()
+	defer conn.Close()
 	for {
 		mt, buffer, err := clientConn.Conn.ReadMessage()
 		if err != nil {
@@ -129,7 +145,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		revMsgId:=clientReq.MsgId
 		userId:=clientReq.UserId
 		switch revMsgId {
-		case 1:
+		case msg.QUERY:
 			if QueryExist(userId){
 				// 如果已经插入过就查询, 不写了
 				log.Printf("QueryExist userId=%d", userId)
