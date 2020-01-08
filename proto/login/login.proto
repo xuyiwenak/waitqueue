@@ -3,15 +3,15 @@ syntax = "proto3";
 package login;
 
 message Request {
-    uint64 client_id = 1;
-    uint64 user_id = 2;
-    uint64 msg_id = 3;
+    uint64 msg_id = 1;
+    uint64 client_id = 2;
+    uint64 user_id = 3;
     string data = 4;
 }
 
 message Response {
-    uint64 user_id = 1;
-    uint64 msg_id = 2;
-    uint64 rank_num = 3;
+    uint64 msg_id = 1;
+    uint64 user_id = 2;
+    int64 rank_num = 3;
 }
 

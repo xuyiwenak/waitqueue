@@ -36,13 +36,13 @@ var (
 	// 注册正在排队的用户
 	registMap sync.Map
 	// 当前正在处理的序号
-	curNum uint64
+	curNum int64
 )
 // 基础数据的初始化
 func Init()  {
 	log.Println("Init waitQueue...")
 	// 当前处理的初值
-	atomic.StoreUint64(&curNum, 0)
+	atomic.StoreInt64(&curNum, 0)
 	// 队列初始化
 	waitQueue = queue.NewQueue(10000)
 	seqIdQueue = queue.NewQueue(10000)
@@ -55,23 +55,22 @@ func InsertSeqId(num int)  {
 	}
 }
 
-func QueryExist(userId uint64) bool {
+func QueryUserExist(userId uint64) bool {
 	_, exists := registMap.Load(userId)
-	log.Printf("exists:%v", exists)
 	return exists
 }
 
-func GetCurProcessNum()  uint64{
-	return atomic.LoadUint64(&curNum)
+func GetCurProcessNum()  int64{
+	return atomic.LoadInt64(&curNum)
 }
-func AddCurProcessNum()  {
-	atomic.AddUint64(&curNum, 1)
+func AddCurProcessNum(delta int64)  {
+	atomic.AddInt64(&curNum, delta)
 }
-func GetRankNum(userId uint64)  (uint64, bool){
+func GetRankNum(userId uint64)  (int64, bool){
 	if cc, ok := registMap.Load(userId);ok == true{
 		value:=cc.(*clic.ClientConn)
-		log.Println(value.SeqId, GetCurProcessNum())
-		return value.SeqId - GetCurProcessNum(), ok
+		log.Printf("userId:%d seqId:%d hasProcess:%d", userId, value.SeqId, GetCurProcessNum())
+		return int64(value.SeqId) - GetCurProcessNum()+1, ok
 	}else {
 		return 0, ok
 	}
@@ -88,6 +87,7 @@ func RemoveRecord(userId uint64)  {
 		value:=conn.(*clic.ClientConn)
 		var cancel login.Response
 		cancel.MsgId=msg.CANCEL
+		cancel.UserId=userId
 		if err:=value.SendPBMsg(userId, &cancel);err!=nil{
 			log.Println(err)
 		}
@@ -103,11 +103,11 @@ func RemoveRecord(userId uint64)  {
 func POPQ() uint64{
 	for {
 		r := waitQueue.QPOP()
-		AddCurProcessNum()
+		AddCurProcessNum(1)
 		field := reflect.ValueOf(r)
 		switch field.Kind() {
 		case reflect.Uint64:
-			if QueryExist(field.Interface().(uint64)){
+			if QueryUserExist(field.Interface().(uint64)){
 				log.Printf("read value: %d\n", r)
 				return field.Interface().(uint64)
 			}
@@ -120,22 +120,34 @@ func POPQ() uint64{
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
-	log.Println("Login start...")
 	conn, err := upgrader.Upgrade(w, r, nil)
-	userId := r.URL.Query().Get("userId")
+	RevUserId := r.URL.Query().Get("userId")
+	var userId uint64
 	if err != nil {
 		log.Print("upgrade:", err)
 		return
 	}
-	userIdInt,_:=strconv.Atoi(userId)
+	if userIdInt,err:=strconv.Atoi(RevUserId);err!=nil{
+		log.Println(err)
+		return
+	}else {
+		userId =uint64(userIdInt)
+	}
+	log.Printf("user[%d] start login...", userId)
+	if QueryUserExist(userId){
+		log.Printf("QueryUserExist userId=%d", userId)
+		return
+	}
 	curSeqId :=seqIdQueue.QPOP()
-	clientConn := clic.NewClient(uint64(userIdInt), conn, curSeqId.(uint64))
+	clientConn := clic.NewClient(userId, conn, curSeqId.(uint64))
+    WriteRecord(userId, clientConn)
 	defer conn.Close()
 	for {
 		mt, buffer, err := clientConn.Conn.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
+			log.Printf("read conntion buffer:%s:", err)
 			RemoveRecord(clientConn.UserId)
+			AddCurProcessNum(1)
 			break
 		}
 		if err := pb.Unmarshal(buffer, &clientReq); err != nil {
@@ -146,25 +158,17 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		userId:=clientReq.UserId
 		switch revMsgId {
 		case msg.QUERY:
-			if QueryExist(userId){
-				// 如果已经插入过就查询, 不写了
-				log.Printf("QueryExist userId=%d", userId)
-			}else {
-				WriteRecord(userId, clientConn)
+			serverRes.UserId = userId
+			serverRes.MsgId = revMsgId
+			serverRes.RankNum, _ = GetRankNum(userId)
+			pbBuffer, _ := pb.Marshal(&serverRes)
+			err = clientConn.Conn.WriteMessage(mt, pbBuffer)
+			if err != nil {
+				log.Println("write:", err)
+				break
 			}
-			break
 		default:
 			log.Println("not this msgId!")
-			break
-		}
-		serverRes.UserId = userId
-		serverRes.MsgId = revMsgId
-		serverRes.RankNum, _ = GetRankNum(userId)
-
-		pbBuffer, _ := pb.Marshal(&serverRes)
-		err = clientConn.Conn.WriteMessage(mt, pbBuffer)
-		if err != nil {
-			log.Println("write:", err)
 			break
 		}
 	}

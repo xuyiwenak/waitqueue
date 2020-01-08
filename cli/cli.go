@@ -39,12 +39,12 @@ func main() {
 	defer c.Close()
 
 	done := make(chan struct{})
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(time.Second*5)
 	defer ticker.Stop()
 	go func() {
 		defer close(done)
 		for {
-			mt, buffer, err := c.ReadMessage()
+			_, buffer, err := c.ReadMessage()
 			if err != nil {
 				log.Println("read:", err)
 				return
@@ -52,11 +52,12 @@ func main() {
 			if err := pb.Unmarshal(buffer, &serverRes); err != nil {
 				log.Printf("proto unmarshal: %s", err)
 			}
-			log.Printf("recv from server=%s, msgtype=%d", serverRes.String(), mt)
 			revMsgId:=serverRes.MsgId
+			revUserId:=serverRes.UserId
+			revRankNum:=serverRes.RankNum
 			switch revMsgId {
 			case msg.QUERY:
-				log.Println("recv query...")
+				log.Printf("recv rankInfo userId:%d rankNum:%d", revUserId, revRankNum)
 				break
 			case msg.CANCEL:
 				log.Println("stop ticker...")
@@ -85,13 +86,12 @@ func main() {
 				break
 			}
 		case <-interrupt:
-			// 断开的时候指明是哪个userId
 			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, string(userId)))
 			if err != nil {
 				log.Println("write close:", err)
 				return
 			}
-			log.Fatalln("interrupt")
+			log.Println("interrupt")
 		}
 	}
 }
