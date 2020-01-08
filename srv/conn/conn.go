@@ -1,4 +1,4 @@
-package clic
+package conn
 
 import (
 	pb "github.com/gogo/protobuf/proto"

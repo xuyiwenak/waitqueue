@@ -2,7 +2,6 @@ package handler
 
 import (
 	"flag"
-	pb "github.com/gogo/protobuf/proto"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"waitqueue/srv/conn"
 	"waitqueue/utils/msg"
 	"waitqueue/utils/queue"
+	pb "github.com/gogo/protobuf/proto"
 )
 
 const loginPort string  = "localhost:8083"
@@ -68,7 +68,7 @@ func AddCurProcessNum(delta int64)  {
 }
 func GetRankNum(userId uint64)  (int64, bool){
 	if cc, ok := registMap.Load(userId);ok == true{
-		value:=cc.(*clic.ClientConn)
+		value:=cc.(*conn.ClientConn)
 		log.Printf("userId:%d seqId:%d hasProcess:%d", userId, value.SeqId, GetCurProcessNum())
 		return int64(value.SeqId) - GetCurProcessNum()+1, ok
 	}else {
@@ -76,15 +76,15 @@ func GetRankNum(userId uint64)  (int64, bool){
 	}
 }
 
-func WriteRecord(userId uint64, cc *clic.ClientConn)  {
+func WriteRecord(userId uint64, cc *conn.ClientConn)  {
 	registMap.Store(userId, cc)
 	waitQueue.QPUSH(userId)
 }
 
 func RemoveRecord(userId uint64)  {
-	conn, exists := registMap.Load(userId)
+	c, exists := registMap.Load(userId)
 	if exists{
-		value:=conn.(*clic.ClientConn)
+		value:=c.(*conn.ClientConn)
 		var cancel login.Response
 		cancel.MsgId=msg.CANCEL
 		cancel.UserId=userId
@@ -120,11 +120,11 @@ func POPQ() uint64{
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	c, err := upgrader.Upgrade(w, r, nil)
 	RevUserId := r.URL.Query().Get("userId")
 	var userId uint64
 	if err != nil {
-		log.Print("upgrade:", err)
+		log.Printf("upgrade:%s", err)
 		return
 	}
 	if userIdInt,err:=strconv.Atoi(RevUserId);err!=nil{
@@ -133,20 +133,24 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	}else {
 		userId =uint64(userIdInt)
 	}
-	log.Printf("user[%d] start login...", userId)
+	log.Printf("user[%d] start waiting...", userId)
 	if QueryUserExist(userId){
 		log.Printf("QueryUserExist userId=%d", userId)
 		return
 	}
 	curSeqId :=seqIdQueue.QPOP()
-	clientConn := clic.NewClient(userId, conn, curSeqId.(uint64))
+	clientConn := conn.NewClient(userId, c, curSeqId.(uint64))
     WriteRecord(userId, clientConn)
-	defer conn.Close()
+	defer c.Close()
+	MsgRecv(clientConn)
+}
+
+func MsgRecv(cli *conn.ClientConn)  {
 	for {
-		mt, buffer, err := clientConn.Conn.ReadMessage()
+		mt, buffer, err := cli.Conn.ReadMessage()
 		if err != nil {
 			log.Printf("read conntion buffer:%s:", err)
-			RemoveRecord(clientConn.UserId)
+			RemoveRecord(cli.UserId)
 			AddCurProcessNum(1)
 			break
 		}
@@ -162,7 +166,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 			serverRes.MsgId = revMsgId
 			serverRes.RankNum, _ = GetRankNum(userId)
 			pbBuffer, _ := pb.Marshal(&serverRes)
-			err = clientConn.Conn.WriteMessage(mt, pbBuffer)
+			err = cli.Conn.WriteMessage(mt, pbBuffer)
 			if err != nil {
 				log.Println("write:", err)
 				break
@@ -173,7 +177,6 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
-
 func RunLoginServer()  {
 	flag.Parse()
 	log.SetFlags(0)
